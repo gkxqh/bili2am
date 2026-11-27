@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bili2am"
+version = "0.1.0"
+description = "Extract tracklists from Bilibili music compilation videos and import verified tracks to Apple Music on macOS."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [
+  { name = "bili2am contributors" }
+]
+keywords = ["bilibili", "apple-music", "tracklist", "ocr", "shazam", "macos", "playlist"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: MacOS X",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+  "fastapi>=0.115.0",
+  "httpx>=0.27.0",
+  "pydantic>=2.7.0",
+  "uvicorn>=0.30.0",
+  "yt-dlp>=2024.8.0",
+]
+
+[project.optional-dependencies]
+shazam = ["shazamio>=0.7.0"]
+web = ["playwright>=1.45.0"]
+dev = [
+  "pytest>=8.0.0",
+  "ruff>=0.6.0",
+]
+all = [
+  "playwright>=1.45.0",
+  "shazamio>=0.7.0",
+]
+
+[project.scripts]
+bili2am = "bili2am.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+bili2am = ["ui/static/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]

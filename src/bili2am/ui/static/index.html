@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>bili2am · B站歌单审核与 Apple Music 导入</title>
+  <style>
+    :root {
+      --bg: #f5f5f7;
+      --card: #ffffff;
+      --text: #1d1d1f;
+      --muted: #6e6e73;
+      --border: #e5e5ea;
+      --accent: #fa243c;
+      --accent-soft: rgba(250, 36, 60, 0.1);
+      --green: #1e8e3e;
+      --green-bg: #e6f4ea;
+      --amber: #b06000;
+      --amber-bg: #fef7e0;
+      --red: #c5221f;
+      --red-bg: #fce8e6;
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .container { max-width: 1080px; margin: 0 auto; padding: 24px 20px 64px; }
+    header {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 16px; flex-wrap: wrap; margin-bottom: 18px;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .logo {
+      width: 40px; height: 40px; border-radius: 10px;
+      background: linear-gradient(135deg, #fa243c, #fb5c74);
+      color: #fff; font-weight: 700; display: grid; place-items: center; font-size: 18px;
+    }
+    h1 { margin: 0; font-size: 20px; }
+    .subtitle { color: var(--muted); font-size: 13px; }
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px 20px; margin-bottom: 16px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+    }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    input[type="text"], select {
+      border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px;
+      font-size: 14px; background: #fff; color: var(--text);
+    }
+    input[type="text"]:focus, select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+    button {
+      border: 1px solid var(--border); border-radius: 10px; padding: 9px 15px;
+      font-size: 13px; font-weight: 600; cursor: pointer; background: #fff; color: var(--text);
+      transition: all 0.15s ease;
+    }
+    button:hover { background: #f2f2f7; }
+    button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    button.primary:hover { filter: brightness(0.95); background: var(--accent); }
+    button.secondary { background: #1d1d1f; color: #fff; border-color: #1d1d1f; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .notice {
+      font-size: 13px; padding: 10px 14px; border-radius: 10px;
+      background: #f2f2f7; color: #3a3a3c; margin-bottom: 14px;
+      display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+    }
+    .stats { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 12px; margin: 14px 0; }
+    .stat { background: #fafafa; border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+    .stat .num { font-size: 22px; font-weight: 700; }
+    .stat .lbl { font-size: 12px; color: var(--muted); }
+    .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .tab.active { background: var(--text); color: #fff; border-color: var(--text); }
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 999px;
+      font-size: 12px; font-weight: 600;
+    }
+    .badge.matched { background: var(--green-bg); color: var(--green); }
+    .badge.uncertain { background: var(--amber-bg); color: var(--amber); }
+    .badge.missing { background: var(--red-bg); color: var(--red); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 10px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
+    th { color: var(--muted); font-weight: 600; font-size: 12px; }
+    .edit-pair { display: flex; gap: 6px; flex-wrap: wrap; }
+    .edit-pair input { width: 130px; padding: 6px 8px; font-size: 13px; }
+    .missing-box {
+      border: 1px solid #f5c2c0; background: #fff7f7; border-radius: 12px; padding: 14px 16px; margin-top: 14px;
+    }
+    .missing-list { margin: 8px 0 0; padding-left: 20px; font-size: 13px; color: #5c1918; }
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.35);
+      display: none; place-items: center; padding: 20px; z-index: 50;
+    }
+    .modal-backdrop.open { display: grid; }
+    .modal {
+      background: #fff; border-radius: 16px; max-width: 660px; width: 100%;
+      max-height: 88vh; overflow-y: auto; padding: 22px; box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+    }
+    .small { font-size: 12px; color: var(--muted); }
+    .status-toast {
+      margin-top: 10px; padding: 10px 14px; border-radius: 10px; font-size: 13px; display: none;
+    }
+    .status-toast.show { display: block; }
+    .status-toast.ok { background: var(--green-bg); color: var(--green); }
+    .status-toast.err { background: var(--red-bg); color: var(--red); }
+    @media (max-width: 720px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <div class="logo">♫</div>
+        <div>
+          <h1>bili2am</h1>
+          <div class="subtitle">B 站音乐合集提取 · Apple Music 曲库核对 · 本地确认导入</div>
+        </div>
+      </div>
+      <div class="row">
+        <button id="btn-settings">⚙️ 设置与本地模型</button>
+      </div>
+    </header>
+
+    <div class="notice" id="cookie-notice">
+      <span>正在加载配置与浏览器 Cookie 状态...</span>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <input id="input-url" type="text" style="flex: 1; min-width: 260px;"
+               placeholder="粘贴 B 站视频链接、b23.tv 短链或 BV 号（如 BV1xx411c7mD）" />
+        <select id="select-mode" title="提取模式">
+          <option value="auto">智能瀑布流 (文本→OCR→识曲)</option>
+          <option value="text">仅文本 (分P/简介/评论)</option>
+          <option value="ocr">强制画面 OCR (Vision)</option>
+          <option value="shazam">强制听歌识曲 (shazamio)</option>
+        </select>
+        <select id="select-storefront" title="Apple Music 曲库地区">
+          <option value="cn">国区 (CN)</option>
+          <option value="us">美区 (US)</option>
+          <option value="jp">日区 (JP)</option>
+          <option value="hk">港区 (HK)</option>
+          <option value="tw">台区 (TW)</option>
+        </select>
+        <button id="btn-analyze" class="primary">提取并校验曲库</button>
+      </div>
+      <div id="analyze-status" class="small" style="margin-top:8px;"></div>
+    </div>
+
+    <div id="main-panel" style="display:none;">
+      <div class="card">
+        <div class="row" style="justify-content: space-between;">
+          <div>
+            <strong id="video-title" style="font-size:16px;"></strong>
+            <div class="small" id="video-meta"></div>
+          </div>
+          <div class="small" id="extraction-notes"></div>
+        </div>
+
+        <div class="stats">
+          <div class="stat"><div class="num" id="stat-total">0</div><div class="lbl">提取总曲目</div></div>
+          <div class="stat"><div class="num" id="stat-matched" style="color:var(--green)">0</div><div class="lbl">✅ 曲库已匹配</div></div>
+          <div class="stat"><div class="num" id="stat-uncertain" style="color:var(--amber)">0</div><div class="lbl">⚠️ 待人工确认</div></div>
+          <div class="stat"><div class="num" id="stat-missing" style="color:var(--red)">0</div><div class="lbl">❌ 曲库未收录</div></div>
+        </div>
+
+        <div class="tabs">
+          <button class="tab active" data-filter="all">全部</button>
+          <button class="tab" data-filter="matched">✅ 曲库已有</button>
+          <button class="tab" data-filter="uncertain">⚠️ 待确认</button>
+          <button class="tab" data-filter="missing">❌ 曲库缺失</button>
+        </div>
+
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:36px;">导入</th>
+                <th style="width:68px;">时间</th>
+                <th>提取歌手 / 歌名（可修改重搜）</th>
+                <th>Apple Music 匹配结果与试听</th>
+                <th style="width:92px;">状态</th>
+              </tr>
+            </thead>
+            <tbody id="track-tbody"></tbody>
+          </table>
+        </div>
+
+        <div id="missing-section" class="missing-box" style="display:none;">
+          <strong>❌ 以下曲目在当前 Apple Music 曲库中未收录（将不会导入，也不导出单独文件）：</strong>
+          <ul class="missing-list" id="missing-list"></ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row" style="justify-content: space-between; margin-bottom: 10px;">
+          <div class="row" style="flex:1;">
+            <label for="playlist-name" class="small"><strong>目标歌单名称：</strong></label>
+            <input id="playlist-name" type="text" style="min-width:260px; flex:1; max-width:460px;" />
+          </div>
+          <span class="small" id="selected-count-label"></span>
+        </div>
+        <div class="row">
+          <button id="btn-import-web-am" class="primary">🌐 自动导入到 Apple Music（Chrome 网页版）</button>
+          <button id="btn-copy-txt" class="secondary">📋 复制标准歌单（TXT）</button>
+          <button id="btn-export-csv">⬇️ 导出已匹配 CSV</button>
+          <button id="btn-export-txt">⬇️ 导出已匹配 TXT</button>
+        </div>
+        <div id="import-toast" class="status-toast"></div>
+        <div id="web-am-queue" style="display:none; margin-top:14px; border-top:1px solid var(--border); padding-top:12px;">
+          <div class="row" style="justify-content:space-between; margin-bottom:8px;">
+            <strong style="font-size:14px;">🌐 网页版 Apple Music 导入明细与实时日志</strong>
+            <button id="btn-stop-web-job" style="display:none; border-color:var(--red); color:var(--red);">⏹ 停止任务</button>
+          </div>
+          <details id="web-am-logs-box" style="margin-bottom:10px;" open>
+            <summary class="small" style="cursor:pointer; font-weight:600;">📋 实时执行日志</summary>
+            <div id="web-am-log-path" class="small" style="margin:4px 0;"></div>
+            <pre id="web-am-logs" style="background:#1d1d1f; color:#e5e5ea; padding:10px 12px; border-radius:10px; font-size:12px; overflow:auto; max-height:240px; margin:4px 0;"></pre>
+          </details>
+          <div id="web-am-items" class="small"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings & Local LLM Modal -->
+  <div id="settings-modal" class="modal-backdrop">
+    <div class="modal">
+      <div class="row" style="justify-content: space-between; margin-bottom: 14px;">
+        <h2 style="margin:0; font-size:18px;">设置与本地小模型（可选）</h2>
+        <button id="btn-close-settings">关闭</button>
+      </div>
+
+      <h3 style="font-size:14px; margin:12px 0 6px;">1. 浏览器 Cookie 读取（用于抓取热评与清晰画质）</h3>
+      <label class="row small" style="margin-bottom:8px;">
+        <input type="checkbox" id="cfg-cookie-enabled" />
+        启用自动读取本地浏览器 Cookie（仅在本地内存使用，不落盘、不上传）
+      </label>
+      <div class="row" style="margin-bottom:14px;">
+        <span class="small">读取优先级（逗号分隔）：</span>
+        <input id="cfg-cookie-priority" type="text" style="flex:1;" placeholder="safari, edge, chrome" />
+      </div>
+
+      <h3 style="font-size:14px; margin:12px 0 6px;">2. 智能歌单清洗（可选接入本地 Ollama / 云端 API）</h3>
+      <div class="row" style="margin-bottom:8px;">
+        <select id="cfg-llm-provider">
+          <option value="none">关闭（纯本地规则清洗，零额外依赖）</option>
+          <option value="ollama">本地 Ollama 小模型（零费用）</option>
+          <option value="openai">OpenAI 兼容 API</option>
+        </select>
+        <input id="cfg-ollama-model" type="text" placeholder="ollama 模型名，如 qwen2.5:3b" style="flex:1;" />
+      </div>
+      <div id="ollama-box" style="background:#fafafa; border:1px solid var(--border); border-radius:10px; padding:12px; margin-bottom:12px;">
+        <div class="small" id="ollama-status-text">检查 Ollama 状态中...</div>
+        <div id="recommended-models" style="margin-top:8px;"></div>
+        <div id="pull-progress" class="small" style="margin-top:8px; color:var(--amber);"></div>
+      </div>
+
+      <div id="openai-box" style="display:none; margin-bottom:12px;">
+        <div class="row" style="margin-bottom:6px;">
+          <input id="cfg-openai-url" type="text" placeholder="Base URL" style="flex:1;" />
+          <input id="cfg-openai-model" type="text" placeholder="Model" style="width:160px;" />
+        </div>
+        <input id="cfg-openai-key" type="text" placeholder="API Key" style="width:100%;" />
+      </div>
+
+      <div class="row" style="justify-content:flex-end; margin-top:16px;">
+        <button id="btn-save-settings" class="primary">保存设置</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let appState = { config: null, result: null, filter: "all" };
+    let audioPlayer = new Audio();
+    let playingId = null;
+
+    async function loadState() {
+      const resp = await fetch("/api/state");
+      const data = await resp.json();
+      appState.config = data.config;
+      appState.result = data.result;
+      renderSettings(data);
+      if (data.result) {
+        renderResult(data.result);
+      } else {
+        const enabled = data.config.cookie.enabled;
+        const pri = data.config.cookie.priority.join(" -> ");
+        document.getElementById("cookie-notice").innerHTML = enabled
+          ? `<span>🍪 Cookie 策略：已开启，将按 <b>${pri}</b> 优先级仅在本地读取 B 站登录态。</span>`
+          : `<span>🍪 Cookie 策略：已关闭（匿名模式）。可在右上角设置中开启。</span>`;
+      }
+      document.getElementById("select-storefront").value = data.config.storefront || "cn";
+    }
+
+    function renderSettings(data) {
+      const cfg = data.config;
+      document.getElementById("cfg-cookie-enabled").checked = cfg.cookie.enabled;
+      document.getElementById("cfg-cookie-priority").value = (cfg.cookie.priority || []).join(", ");
+      document.getElementById("cfg-llm-provider").value = cfg.llm.provider;
+      document.getElementById("cfg-ollama-model").value = cfg.llm.ollama_model;
+      document.getElementById("cfg-openai-url").value = cfg.llm.openai_base_url;
+      document.getElementById("cfg-openai-model").value = cfg.llm.openai_model;
+      document.getElementById("cfg-openai-key").value = cfg.llm.openai_api_key;
+      document.getElementById("openai-box").style.display = cfg.llm.provider === "openai" ? "block" : "none";
+
+      const ol = data.ollama || {};
+      const statusEl = document.getElementById("ollama-status-text");
+      if (ol.reachable) {
+        const installed = (ol.models || []).length ? ol.models.join("、") : "暂无已下载模型（未占用存储空间）";
+        statusEl.innerHTML = `🟢 Ollama 服务运行中 · 已安装模型：<b>${installed}</b>`;
+      } else {
+        statusEl.innerHTML = `⚪ 未检测到运行中的 Ollama 服务（如需免费本地小模型，可后续安装并启动 Ollama）。`;
+      }
+
+      const recDiv = document.getElementById("recommended-models");
+      recDiv.innerHTML = (data.recommended_models || []).map(m => {
+        const hasIt = (ol.models || []).some(x => x.startsWith(m.name));
+        return `
+          <div class="row" style="justify-content:space-between; padding:6px 0; border-top:1px solid #eee;">
+            <div>
+              <strong>${m.name}</strong> <span class="small">(${m.size_hint})</span>
+              <div class="small">${m.desc}</div>
+            </div>
+            <div>
+              ${hasIt
+                ? `<button onclick="useOllamaModel('${m.name}')">选用此模型</button>`
+                : `<button onclick="pullOllamaModel('${m.name}')" ${!ol.reachable ? "disabled" : ""}>下载模型</button>`
+              }
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      const ps = data.pull_status || {};
+      if (ps.message) {
+        document.getElementById("pull-progress").textContent = ps.message;
+      }
+    }
+
+    function useOllamaModel(name) {
+      document.getElementById("cfg-llm-provider").value = "ollama";
+      document.getElementById("cfg-ollama-model").value = name;
+    }
+
+    async function pullOllamaModel(model) {
+      document.getElementById("pull-progress").textContent = `正在启动下载 ${model}...`;
+      await fetch("/api/ollama/pull", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ model }),
+      });
+      pollPull();
+    }
+
+    async function pollPull() {
+      const resp = await fetch("/api/state");
+      const data = await resp.json();
+      renderSettings(data);
+      if (data.pull_status && data.pull_status.running) {
+        setTimeout(pollPull, 2000);
+      }
+    }
+
+    function renderResult(res) {
+      document.getElementById("main-panel").style.display = "block";
+      document.getElementById("cookie-notice").innerHTML = `<span>🍪 ${res.cookie_info.notice}</span>`;
+      document.getElementById("video-title").textContent = `${res.video.title} (${res.video.bvid})`;
+      document.getElementById("video-meta").textContent =
+        `UP主：${res.video.owner || "未知"} · 提取方式：${res.extraction_method} · 清洗：${res.llm_used} · 曲库地区：${res.storefront.toUpperCase()}`;
+      document.getElementById("extraction-notes").textContent = (res.extraction_notes || []).join(" ");
+      document.getElementById("playlist-name").value = res.playlist_name || res.video.title;
+
+      renderTracks();
+    }
+
+    function renderTracks() {
+      const tracks = appState.result.tracks || [];
+      const matched = tracks.filter(t => t.status === "matched").length;
+      const uncertain = tracks.filter(t => t.status === "uncertain").length;
+      const missing = tracks.filter(t => t.status === "missing");
+      const selectedOk = tracks.filter(t => t.selected && t.status !== "missing" && t.candidates.length).length;
+
+      document.getElementById("stat-total").textContent = tracks.length;
+      document.getElementById("stat-matched").textContent = matched;
+      document.getElementById("stat-uncertain").textContent = uncertain;
+      document.getElementById("stat-missing").textContent = missing.length;
+      document.getElementById("selected-count-label").textContent = `已确认待导入：${selectedOk} 首`;
+
+      const tbody = document.getElementById("track-tbody");
+      const filtered = tracks.filter(t => appState.filter === "all" || t.status === appState.filter);
+
+      tbody.innerHTML = filtered.map(t => {
+        const cand = t.candidates && t.candidates[t.selected_candidate_index];
+        const statusLabel = t.status === "matched" ? "✅ 已匹配" : (t.status === "uncertain" ? "⚠️ 待确认" : "❌ 未收录");
+        const candsHtml = (t.candidates && t.candidates.length)
+          ? `
+            <select onchange="selectCand('${t.id}', this.value)" style="max-width:300px;">
+              ${t.candidates.map((c, idx) => `
+                <option value="${idx}" ${idx === t.selected_candidate_index ? "selected" : ""}>
+                  ${c.artist_name} - ${c.track_name} (${Math.round(c.confidence * 100)}%)
+                </option>
+              `).join("")}
+            </select>
+            <div class="row" style="margin-top:4px;">
+              ${cand && cand.preview_url ? `<button onclick="togglePreview('${t.id}', '${cand.preview_url}')">${playingId === t.id ? "⏹ 停止" : "▶ 试听30s"}</button>` : ""}
+              ${cand && cand.track_view_url ? `<a class="small" href="${cand.track_view_url}" target="_blank">Apple Music ↗</a>` : ""}
+              ${cand && cand.collection_name ? `<span class="small">专辑：${cand.collection_name}</span>` : ""}
+            </div>
+          `
+          : `<span class="small">${t.note || "当前地区 Apple Music 曲库未收录"}</span>`;
+
+        return `
+          <tr>
+            <td><input type="checkbox" ${t.selected ? "checked" : ""} ${t.status === "missing" ? "disabled" : ""} onchange="toggleTrack('${t.id}', this.checked)" /></td>
+            <td class="small">${t.timestamp || "-"}</td>
+            <td>
+              <div class="edit-pair">
+                <input type="text" id="art_${t.id}" value="${escapeHtml(t.artist)}" placeholder="歌手" />
+                <input type="text" id="tit_${t.id}" value="${escapeHtml(t.title)}" placeholder="歌名" />
+                <button onclick="rematch('${t.id}')">重搜</button>
+              </div>
+              <div class="small" style="margin-top:3px;">原文：${escapeHtml(t.raw_text)}</div>
+            </td>
+            <td>${candsHtml}</td>
+            <td><span class="badge ${t.status}">${statusLabel}</span></td>
+          </tr>
+        `;
+      }).join("");
+
+      const missingBox = document.getElementById("missing-section");
+      const missingList = document.getElementById("missing-list");
+      if (missing.length) {
+        missingBox.style.display = "block";
+        missingList.innerHTML = missing.map(m =>
+          `<li>${m.timestamp ? `[${m.timestamp}] ` : ""}<b>${escapeHtml(m.artist ? `${m.artist} - ${m.title}` : m.title)}</b> — <span class="small">${escapeHtml(m.note || "曲库无版权/未收录")}</span></li>`
+        ).join("");
+      } else {
+        missingBox.style.display = "none";
+      }
+    }
+
+    function escapeHtml(s) {
+      return (s || "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+    }
+
+    function toggleTrack(id, checked) {
+      const tr = appState.result.tracks.find(x => x.id === id);
+      if (tr) tr.selected = checked;
+      renderTracks();
+    }
+
+    function selectCand(id, idx) {
+      const tr = appState.result.tracks.find(x => x.id === id);
+      if (tr) tr.selected_candidate_index = Number(idx);
+      renderTracks();
+    }
+
+    function togglePreview(id, url) {
+      if (playingId === id) {
+        audioPlayer.pause();
+        playingId = null;
+        renderTracks();
+        return;
+      }
+      audioPlayer.src = url;
+      audioPlayer.play();
+      playingId = id;
+      audioPlayer.onended = () => { playingId = null; renderTracks(); };
+      renderTracks();
+    }
+
+    async function rematch(id) {
+      const idx = appState.result.tracks.findIndex(x => x.id === id);
+      if (idx === -1) return;
+      const artist = document.getElementById(`art_${id}`).value;
+      const title = document.getElementById(`tit_${id}`).value;
+      const resp = await fetch("/api/rematch", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          item: appState.result.tracks[idx],
+          artist,
+          title,
+          country: document.getElementById("select-storefront").value,
+        }),
+      });
+      const updated = await resp.json();
+      appState.result.tracks[idx] = updated;
+      renderTracks();
+    }
+
+    document.querySelectorAll(".tab").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        appState.filter = btn.dataset.filter;
+        renderTracks();
+      });
+    });
+
+    document.getElementById("btn-analyze").addEventListener("click", async () => {
+      const url = document.getElementById("input-url").value.trim();
+      if (!url) return;
+      const status = document.getElementById("analyze-status");
+      status.textContent = "正在提取歌单并检索 Apple Music 曲库（OCR 或识曲阶段可能耗时较长）...";
+      document.getElementById("btn-analyze").disabled = true;
+      try {
+        const resp = await fetch("/api/analyze", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({
+            url,
+            mode: document.getElementById("select-mode").value,
+            storefront: document.getElementById("select-storefront").value,
+            use_cache: false,
+          }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || "提取失败");
+        appState.result = data;
+        status.textContent = "";
+        await loadState();
+      } catch (e) {
+        status.textContent = `❌ ${e.message}`;
+      } finally {
+        document.getElementById("btn-analyze").disabled = false;
+      }
+    });
+
+    async function doImport(method) {
+      const toast = document.getElementById("import-toast");
+      toast.className = "status-toast show";
+      toast.textContent = method === "web_apple_music"
+        ? "正在启动专属 Chrome 窗口访问网页版 Apple Music..."
+        : "正在处理导出...";
+      try {
+        const resp = await fetch("/api/import", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({
+            playlist_name: document.getElementById("playlist-name").value.trim() || "B站导入歌单",
+            method,
+            tracks: appState.result.tracks,
+          }),
+        });
+        const rawText = await resp.text();
+        let data = {};
+        try {
+          data = JSON.parse(rawText);
+        } catch {
+          throw new Error(rawText || `HTTP ${resp.status}`);
+        }
+        if (!resp.ok || !data.ok) {
+          toast.className = "status-toast show err";
+          toast.textContent = `❌ ${data.detail || data.message || "执行失败"}`;
+          if (method === "web_apple_music" && (data.items || data.logs)) {
+            renderWebAmQueue(data.items || [], data.logs || [], data.log_path || "", false);
+          }
+          return;
+        }
+        toast.className = "status-toast show ok";
+        toast.textContent = `✅ ${data.message}`;
+        if (method === "web_apple_music") {
+          renderWebAmQueue(data.items || [], data.logs || [], data.log_path || "", Boolean(data.running));
+          if (data.running) {
+            pollWebAmJob();
+          }
+        }
+      } catch (err) {
+        toast.className = "status-toast show err";
+        toast.textContent = `❌ 请求异常: ${err.message}`;
+      }
+    }
+
+    async function pollWebAmJob() {
+      const resp = await fetch("/api/web-am/status");
+      const data = await resp.json();
+      renderWebAmQueue(data.items || [], data.logs || [], data.log_path || "", Boolean(data.running));
+      const toast = document.getElementById("import-toast");
+      if (data.running) {
+        toast.className = "status-toast show";
+        toast.textContent = data.waiting_for_login
+          ? "🔐 请在弹出的专属 Chrome 窗口中登录 Apple Music（建议使用系统钥匙串保持登录）..."
+          : `⏳ 网页版 Apple Music 正在添加（已成功 ${data.added_count || 0}，失败 ${data.failed_count || 0}）...`;
+        setTimeout(pollWebAmJob, 1000);
+      } else {
+        toast.className = data.ok === false ? "status-toast show err" : "status-toast show ok";
+        toast.textContent = (data.ok === false ? "❌ " : "✅ ") + (data.message || "执行完成");
+      }
+    }
+
+    let webAmLogs = [];
+    let webAmLogPath = "";
+    function renderWebAmQueue(items, logs, logPath, running = false) {
+      if (logs) webAmLogs = logs;
+      if (logPath !== undefined) webAmLogPath = logPath;
+      const box = document.getElementById("web-am-queue");
+      const list = document.getElementById("web-am-items");
+      box.style.display = "block";
+      document.getElementById("btn-stop-web-job").style.display = running ? "inline-block" : "none";
+
+      const badgeMap = {
+        pending: "⏳ 等待处理",
+        added: "✅ 已加入歌单",
+        failed: "❌ 添加失败",
+        skipped: "⏭ 已跳过",
+      };
+      list.innerHTML = (items || []).map(it => `
+        <div class="row" style="justify-content:space-between; padding:6px 0; border-bottom:1px solid #f0f0f0;">
+          <div>
+            <span>${badgeMap[it.status] || it.status}</span>
+            <b>${escapeHtml(it.artist ? `${it.artist} - ${it.title}` : it.title)}</b>
+            <span class="small">· ${escapeHtml(it.detail || "")}</span>
+          </div>
+          ${it.status === "failed" && it.web_url ? `<a class="small" href="${it.web_url}" target="_blank">网页打开 ↗</a>` : ""}
+        </div>
+      `).join("");
+
+      const logsPre = document.getElementById("web-am-logs");
+      const logPathEl = document.getElementById("web-am-log-path");
+      logPathEl.textContent = webAmLogPath ? `日志文件：${webAmLogPath}` : "";
+      logsPre.textContent = (webAmLogs || []).join("\n") || "等待日志输出...";
+      logsPre.scrollTop = logsPre.scrollHeight;
+    }
+
+    document.getElementById("btn-stop-web-job").addEventListener("click", async () => {
+      await fetch("/api/web-am/stop", { method: "POST" });
+    });
+
+    document.getElementById("btn-import-web-am").addEventListener("click", () => doImport("web_apple_music"));
+    document.getElementById("btn-export-csv").addEventListener("click", () => doImport("csv"));
+    document.getElementById("btn-export-txt").addEventListener("click", () => doImport("txt"));
+    document.getElementById("btn-copy-txt").addEventListener("click", async () => {
+      const resp = await fetch("/api/export-preview", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          playlist_name: document.getElementById("playlist-name").value.trim() || "B站导入歌单",
+          method: "txt",
+          tracks: appState.result.tracks,
+        }),
+      });
+      const text = await resp.text();
+      await navigator.clipboard.writeText(text);
+      const toast = document.getElementById("import-toast");
+      toast.className = "status-toast show ok";
+      toast.textContent = "✅ 已复制全部已匹配曲目到剪贴板，可直接粘贴到 TuneMyMusic / Soundiiz 导入！";
+    });
+
+    // Settings Modal
+    const modal = document.getElementById("settings-modal");
+    document.getElementById("btn-settings").addEventListener("click", () => { loadState(); modal.classList.add("open"); });
+    document.getElementById("btn-close-settings").addEventListener("click", () => modal.classList.remove("open"));
+    document.getElementById("cfg-llm-provider").addEventListener("change", (e) => {
+      document.getElementById("openai-box").style.display = e.target.value === "openai" ? "block" : "none";
+    });
+    document.getElementById("btn-save-settings").addEventListener("click", async () => {
+      const nextCfg = structuredClone(appState.config);
+      nextCfg.cookie.enabled = document.getElementById("cfg-cookie-enabled").checked;
+      nextCfg.cookie.priority = document.getElementById("cfg-cookie-priority").value
+        .split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+      nextCfg.llm.provider = document.getElementById("cfg-llm-provider").value;
+      nextCfg.llm.ollama_model = document.getElementById("cfg-ollama-model").value.trim() || "qwen2.5:3b";
+      nextCfg.llm.openai_base_url = document.getElementById("cfg-openai-url").value.trim();
+      nextCfg.llm.openai_model = document.getElementById("cfg-openai-model").value.trim();
+      nextCfg.llm.openai_api_key = document.getElementById("cfg-openai-key").value.trim();
+      nextCfg.storefront = document.getElementById("select-storefront").value;
+      await fetch("/api/config", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(nextCfg),
+      });
+      modal.classList.remove("open");
+      await loadState();
+    });
+
+    loadState();
+  </script>
+</body>
+</html>
